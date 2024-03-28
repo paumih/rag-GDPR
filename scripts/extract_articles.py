@@ -1,5 +1,6 @@
 import PyPDF2
 import json 
+from tqdm import tqdm
 
 class Document:
     def __init__(self, article_number, article_summary, article_content):
@@ -33,58 +34,61 @@ def is_title_page(page_content):
     """
         function that checks if the given page content is the title page of an article
         page_content: str -> represents the page content text as it is extracted from the pdf
-    """
-    
+    """    
     page_content_lines = page_content.split('\n')
-    return (all([
-        'EN' == page_content_lines[0],
-        'Article' in page_content_lines[1],
-        'GDPR training, consulting and DPO outsourcing' in page_content_lines[3],
-        "www.gdpr-text.cominfo@data-privacy" in page_content_lines[-2],
-        "office.eu" in page_content_lines[-1]
-    ]))
+    if len(page_content_lines)>=7:
+        return (all([
+            'EN' == page_content_lines[0],
+            'Article' in page_content_lines[1],
+            'GDPR training, consulting and DPO outsourcing' in page_content_lines[3],
+            "www.gdpr-text.cominfo@data-privacy" in page_content_lines[-2],
+            "office.eu" in page_content_lines[-1]
+        ]))
+    return False
 
-def extract_summaries(text_content):
-    pass
-
-def extract_articles(reader):
+def extract_articles(pdf_reader, a_summaries_lst):
     """
-        function that checks if the given page content is the title page of an article
-        reader: str -> represents the page content text as it is extracted from the pdf
+        function that parses
+        reader: PdfReader class -> ssa
+        a_summaries_lst: List[str]  
     """
     articles = []
-    pages_count = len(reader.pages)
+    pages_count = len(pdf_reader.pages)
 
     # extract the first page content for initialization
-    page_content = reader.pages[0].extract_text()
+    first_article_index = 0
+    page_content = pdf_reader.pages[first_article_index].extract_text()
     if is_title_page(page_content):
         article_number = extract_article_number(page_content)
-        article_obj = Document(article_number,'','')
+        article_obj = Document(article_number,article_summaries[first_article_index],'')
 
-    for page_index in range(1,pages_count):
-        page_content = reader.pages[page_index].extract_text()
+    for page_index in tqdm(range(1,pages_count),desc="Processing pages: "):
+        page_content = pdf_reader.pages[page_index].extract_text()
         if is_title_page(page_content):
             articles.append(article_obj)
             article_number = extract_article_number(page_content)
-            article_obj = Document(article_number,'','')
+            article_obj = Document(article_number,article_summaries[article_number-1],'')
         else:
             article_obj.set_article_content(
                 article_obj.get_article_content()+'\n'+
                 page_content
             )
 
+    return articles
+
     # print([article.to_json() for article in articles])
 if __name__ == '__main__':
     articles_filepath = '/Users/mihai.paul/Desktop/work/rag-GDPR/GDPR Art 1-21.pdf'
     articles_summaries_filepath = '/Users/mihai.paul/Desktop/work/rag-GDPR/summaries.txt'
 
+    article_summaries = []
+    with open(articles_summaries_filepath,'r') as file:
+        article_summaries = [line for line in file.readlines() if line!='\n']
+              
     reader = PyPDF2.PdfReader(articles_filepath)
 
-    extract_articles(reader)
-    # print(is_title_page(reader.pages[5].extract_text()),extract_article_number(reader.pages[5].extract_text()))
+    articles_jsons = [article.to_json() for article in extract_articles(reader, article_summaries)] 
 
+    with open("articles.json", "w") as file_write:
+        json.dump(articles_jsons, file_write)
 
-
-    # print(Document(1,'does this', ['content1, content2']).to_json())
-
-# def create_documents()
